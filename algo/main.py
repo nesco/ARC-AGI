@@ -3,12 +3,6 @@ import json
 import os
 import math
 
-# other imports
-import cv2
-import numpy as np
-from skimage.measure import label, regionprops
-import matplotlib.pyplot as plt
-
 ## Constants
 # Define ANSI escape codes for the closest standard terminal colors
 colors = {
@@ -78,74 +72,88 @@ def filter_by_color(grid, color):
 
 
 def split_by_color(grid):
-    """Create for each color a binary map of the grid"""
+    """Create for each color a mask, i.e a binary map of the grid"""
     grids = {}
     for color in range(10):
         grids[color] = filter_by_color(grid, color)
     return grids
 
 
-# Operator over canals:
-def cardinal(canal):
-    height = len(canal)
-    width = len(canal[0])
+# Operator over masks:
+def cardinal(mask):
+    height = len(mask)
+    width = len(mask[0])
 
-    card = sum([1 for i in range(height) for j in range(width) if canal[i][j] == 1])
+    card = sum([1 for i in range(height) for j in range(width) if mask[i][j] == 1])
     return card
 
+
 # Set operators
-def intersection(canal_a, canal_b):
-    """Intersection of two similar sized canals"""
-    height = len(canal_a)
-    width = len(canal_a[0])
+def intersection(mask1, mask2):
+    """Intersection of two similar sized masks"""
+    height = len(mask1)
+    width = len(mask1[0])
 
-    grid_new = [[0 for j in range(width)] for i in range(height)]
+    mask_new = [[0 for j in range(width)] for i in range(height)]
 
     for i in range(height):
         for j in range(width):
-            if canal_a[i][j] == 1 and canal_b[i][j] == 1:
-                grid_new[i][j] = 1
-    return grid_new
+            if mask1[i][j] == 1 and mask2[i][j] == 1:
+                mask_new[i][j] = 1
+    return mask_new
 
-def union(canal_a, canal_b):
+def union(mask1, mask2):
     """Union of two similar sized canals"""
-    height = len(canal_a)
-    width = len(canal_a[0])
+    height = len(mask1)
+    width = len(mask1[0])
 
-    grid_new = [[0 for j in range(width)] for i in range(height)]
+    mask_new = [[0 for j in range(width)] for i in range(height)]
 
     for i in range(height):
         for j in range(width):
-            if canal_a[i][j] == 1 or canal_b[i][j] == 1:
-                grid_new[i][j] = 1
-    return grid_new
+            if mask1[i][j] == 1 or mask2[i][j] == 1:
+                mask_new[i][j] = 1
+    return mask_new
 
 
 
-def complement(canal):
+def complement(mask):
     """Complement of a canal"""
-    height = len(canal)
-    width = len(canal[0])
+    height = len(mask)
+    width = len(mask[0])
 
-    grid_new = [[1 for j in range(width)] for i in range(height)]
+    mask_new = [[1 for j in range(width)] for i in range(height)]
 
     for i in range(height):
         for j in range(width):
-            if canal[i][j] == 1:
-                grid_new[i][j] = 0
-    return grid_new
+            if mask[i][j] == 1:
+                mask_new[i][j] = 0
+    return mask_new
+
+
+# Set condition
+def contains(mask1, mask2):
+    """Is the mask2 contained in mask1?"""
+    height = len(mask1)
+    width = len(mask1[0])
+
+    for row in range(height):
+        for col in range(width):
+            if mask2[row][col] == 1 and mask1[row][col] == 0:
+                return False
+    return True
 
 
 # Signal-theory operator
 
-def cross_correlation(canal_a, canal_b):
+def cross_correlation(mask1, mask2):
     # Determine which grid is larger and which is the kernel
-    if len(canal_a) * len(canal_a[0]) >= len(canal_b) * len(canal_b[0]):
-        large = canal_a
-        kernel = canal_b
+    if len(mask1) * len(mask1[0]) >= len(mask2) * len(mask2[0]):
+        large = mask1
+        kernel = mask2
     else:
-        large = canal_b
-        kernel = canal_a
+        large = mask2
+        kernel = mask1
 
     large_rows, large_cols = len(large), len(large[0])
     kernel_rows, kernel_cols = len(kernel), len(kernel[0])
@@ -177,18 +185,18 @@ def cross_correlation(canal_a, canal_b):
 
 
 # Set distances and similarities
-def jaccard1(canal1, canal2):
+def jaccard1(mask1, mask2):
     """Jaccard index for two canals of same grid size"""
-    rows, cols = len(canal1), len(canal1[0])
+    rows, cols = len(mask1), len(mask1[0])
     total = rows*cols
     count11 = 0.
     count00 = 0.
 
     for i in range(rows):
         for j in range(cols):
-            if canal1[i][j] == 1 and canal2[i][j] == 1:
+            if mask1[i][j] == 1 and mask2[i][j] == 1:
                 count11 += 1.
-            if canal1[i][j] == 0 and canal2[i][j] == 0:
+            if mask1[i][j] == 0 and mask2[i][j] == 0:
                 count00 += 1.
 
     if count00 == total:
@@ -198,9 +206,9 @@ def jaccard1(canal1, canal2):
     return index, -1, -1
 
 
-def inter_over_union(canal1, canal2):
-    canal_intersection = intersection(canal1, canal2)
-    canal_union = union(canal1, canal2)
+def inter_over_union(mask1, mask2):
+    canal_intersection = intersection(mask1, mask2)
+    canal_union = union(mask1, mask2)
 
     cardinal_intersection = cardinal(canal_intersection)
     cardinal_union = cardinal(canal_union)
@@ -210,8 +218,8 @@ def inter_over_union(canal1, canal2):
     else:
         return cardinal_intersection / cardinal_union, -1, -1
 
-def correlation_peak(canal1, canal2):
-    correlation_matrix = cross_correlation(canal1, canal2)
+def correlation_peak(mask1, mask2):
+    correlation_matrix = cross_correlation(mask1, mask2)
     max = -1
     max_i, max_j = -1, -1
     for i in range(len(correlation_matrix)):
@@ -251,3 +259,72 @@ def load_task(task, index):
     return data, grid_prob, grid_sol, grids_prob, grids_sol
 
 # data, grid_prob, grid_sol, grids_prob, grids_sol = load_task(task)
+# geometric notion: jaccard
+# topologic notion: connex component + correlation
+
+def connex_components(canal, chebyshev=False):
+    """Extract connex components.
+        Chebyshev: if True then 8-connexity is used instead of 4-connexity
+    """
+    component_number = 0
+    height, width = len(canal), len(canal[0])
+    distribution = [[0 for _ in range(width)] for _ in range(height)]
+    to_see = [(i,j) for j in range(width) for i in range(height)]
+    seen = set()
+    components = {}
+    #bounding_boxes = {}
+
+    for i,j in to_see:
+        # Check if there is something to do
+        if (i,j) in seen or canal[i][j] == 0:
+            continue
+
+        # New component found, increase the count and initiate queue
+        component_number += 1
+        components[component_number] = {'mask': [[0 for _ in range(width)] for _ in range(height)]}
+        queue = [(i, j)]
+        min_row, max_row = i, i
+        min_col, max_col = j, j
+
+        while queue:
+            k, l = queue.pop(0)  # Correctly manage the queue
+            if (k, l) in seen:
+                continue
+
+            distribution[k][l] = component_number
+            components[component_number]['mask'][k][l] = 1
+            seen.add((k, l))
+
+            # Update the bounding box
+            min_row, max_row = min(min_row, k), max(max_row, k)
+            min_col, max_col = min(min_col, l), max(max_col, l)
+
+            # Add all 4-connex neighbors
+            for dk, dl in [(0, 1), (1, 0), (0, -1), (-1, 0)]:
+                nk, nl = k + dk, l + dl
+                if 0 <= nk < height and 0 <= nl < width and canal[nk][nl] == 1 and (nk, nl) not in seen:
+                    queue.append((nk, nl))
+
+            if chebyshev:
+                # Add diagonal neighbors
+                for dk, dl in [(-1, -1), (-1, 1), (1, -1), (1, 1)]:
+                    nk, nl = k + dk, l + dl
+                    if 0 <= nk < height and 0 <= nl < width and canal[nk][nl] == 1 and (nk, nl) not in seen:
+                        queue.append((nk, nl))
+
+        # Store the bounding box for the current component
+        components[component_number]['box'] = ((min_row, min_col), (max_row, max_col))
+        #bounding_boxes[component_number] = ((min_row, min_col), (max_row, max_col))
+
+    return component_number, distribution, components #bounding_boxes
+# component_number, distribution, components = connex_components(grids_sol[4])
+#def contains(mask1, mask2):
+    """Is the mask2 contained in mask1?"""
+    height = len(mask1)
+    width = len(mask1[0])
+
+    for row in range(height):
+        for col in range(width):
+            if mask2[row][col] == 1 and mask1[row][col] == 0:
+                return False
+    return True
