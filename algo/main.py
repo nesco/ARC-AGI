@@ -131,6 +131,7 @@ def complement(mask):
     return mask_new
 
 
+
 # Set condition
 def contains(mask1, mask2):
     """Is the mask2 contained in mask1?"""
