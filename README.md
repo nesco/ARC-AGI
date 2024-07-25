@@ -8,6 +8,19 @@ A complete description of the dataset, its goals, and its underlying logic, can 
 
 As a reminder, a test-taker is said to solve a task when, upon seeing the task for the first time, they are able to produce the correct output grid for *all* test inputs in the task (this includes picking the dimensions of the output grid). For each test input, the test-taker is allowed 3 trials (this holds for all test-takers, either humans or AI).
 
+## Set Up conda env
+
+```bash
+# Create the environment
+conda create --name arc_env python=3.8
+
+# Activate the environment
+conda activate arc_env
+
+# Install the packages
+pip install -r requirements.txt
+```
+
 
 ## Task file format
 
