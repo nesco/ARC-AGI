@@ -2,4 +2,5 @@
 .DS_Store
 
 # Ignore the myvenv virtual environment directory
-myvenv/
+myenv/
+__pycache__

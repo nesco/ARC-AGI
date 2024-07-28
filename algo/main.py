@@ -2,6 +2,7 @@
 import json
 import os
 import math
+from operators import *
 
 ## Constants
 # Define ANSI escape codes for the closest standard terminal colors
@@ -45,6 +46,15 @@ def print_colored_grid(grid):
 
     print(f"{colors[5]}   "*(width+2), "\033[0m")
 
+def print_binary_grid(grid):
+    for row in grid:
+        print(' '.join('1' if cell else '0' for cell in row))
+
+def printf_binary_grid(grid):
+    bold = '\033[1m'
+    reset = '\033[0m'
+    for row in grid:
+        print(' '.join(f'{bold}1{reset}' if cell else '0' for cell in row))
 
 # structure
 # - train
@@ -80,57 +90,6 @@ def split_by_color(grid):
 
 
 # Operator over masks:
-def cardinal(mask):
-    height = len(mask)
-    width = len(mask[0])
-
-    card = sum([1 for i in range(height) for j in range(width) if mask[i][j] == 1])
-    return card
-
-
-# Set operators
-def intersection(mask1, mask2):
-    """Intersection of two similar sized masks"""
-    height = len(mask1)
-    width = len(mask1[0])
-
-    mask_new = [[0 for j in range(width)] for i in range(height)]
-
-    for i in range(height):
-        for j in range(width):
-            if mask1[i][j] == 1 and mask2[i][j] == 1:
-                mask_new[i][j] = 1
-    return mask_new
-
-def union(mask1, mask2):
-    """Union of two similar sized canals"""
-    height = len(mask1)
-    width = len(mask1[0])
-
-    mask_new = [[0 for j in range(width)] for i in range(height)]
-
-    for i in range(height):
-        for j in range(width):
-            if mask1[i][j] == 1 or mask2[i][j] == 1:
-                mask_new[i][j] = 1
-    return mask_new
-
-
-
-def complement(mask):
-    """Complement of a canal"""
-    height = len(mask)
-    width = len(mask[0])
-
-    mask_new = [[1 for j in range(width)] for i in range(height)]
-
-    for i in range(height):
-        for j in range(width):
-            if mask[i][j] == 1:
-                mask_new[i][j] = 0
-    return mask_new
-
-
 
 # Set condition
 def contains(mask1, mask2):
@@ -144,6 +103,9 @@ def contains(mask1, mask2):
                 return False
     return True
 
+
+
+# Morphological operators
 
 # Signal-theory operator
 
@@ -262,70 +224,3 @@ def load_task(task, index):
 # data, grid_prob, grid_sol, grids_prob, grids_sol = load_task(task)
 # geometric notion: jaccard
 # topologic notion: connex component + correlation
-
-def connex_components(canal, chebyshev=False):
-    """Extract connex components.
-        Chebyshev: if True then 8-connexity is used instead of 4-connexity
-    """
-    component_number = 0
-    height, width = len(canal), len(canal[0])
-    distribution = [[0 for _ in range(width)] for _ in range(height)]
-    to_see = [(i,j) for j in range(width) for i in range(height)]
-    seen = set()
-    components = {}
-    #bounding_boxes = {}
-
-    for i,j in to_see:
-        # Check if there is something to do
-        if (i,j) in seen or canal[i][j] == 0:
-            continue
-
-        # New component found, increase the count and initiate queue
-        component_number += 1
-        components[component_number] = {'mask': [[0 for _ in range(width)] for _ in range(height)]}
-        queue = [(i, j)]
-        min_row, max_row = i, i
-        min_col, max_col = j, j
-
-        while queue:
-            k, l = queue.pop(0)  # Correctly manage the queue
-            if (k, l) in seen:
-                continue
-
-            distribution[k][l] = component_number
-            components[component_number]['mask'][k][l] = 1
-            seen.add((k, l))
-
-            # Update the bounding box
-            min_row, max_row = min(min_row, k), max(max_row, k)
-            min_col, max_col = min(min_col, l), max(max_col, l)
-
-            # Add all 4-connex neighbors
-            for dk, dl in [(0, 1), (1, 0), (0, -1), (-1, 0)]:
-                nk, nl = k + dk, l + dl
-                if 0 <= nk < height and 0 <= nl < width and canal[nk][nl] == 1 and (nk, nl) not in seen:
-                    queue.append((nk, nl))
-
-            if chebyshev:
-                # Add diagonal neighbors
-                for dk, dl in [(-1, -1), (-1, 1), (1, -1), (1, 1)]:
-                    nk, nl = k + dk, l + dl
-                    if 0 <= nk < height and 0 <= nl < width and canal[nk][nl] == 1 and (nk, nl) not in seen:
-                        queue.append((nk, nl))
-
-        # Store the bounding box for the current component
-        components[component_number]['box'] = ((min_row, min_col), (max_row, max_col))
-        #bounding_boxes[component_number] = ((min_row, min_col), (max_row, max_col))
-
-    return component_number, distribution, components #bounding_boxes
-# component_number, distribution, components = connex_components(grids_sol[4])
-#def contains(mask1, mask2):
-    """Is the mask2 contained in mask1?"""
-    height = len(mask1)
-    width = len(mask1[0])
-
-    for row in range(height):
-        for col in range(width):
-            if mask2[row][col] == 1 and mask1[row][col] == 0:
-                return False
-    return True
