@@ -10,6 +10,9 @@ Operators are classified in:
     - Signal and probabilistic operators: [TO-DO]
 """
 
+# connected_component
+# - mask -> [][]
+# - box -> ((top-left corner), (bottom_right, corner))
 ### Constants
 # Topological constants
 # The Manhattan / 4-connectivity kernel is a cross
@@ -68,8 +71,8 @@ def union(mask1, mask2):
 
 def complement(mask):
     return fill_unary(mask, lambda a: 0 if (a == 1) else 1)
-# Set conditions
-def contains(mask_larger, mask_smaller):
+# Set test
+def set_contains(mask_larger, mask_smaller):
     return intersection(mask_larger, mask_smaller) == mask_smaller
 ## Geometric operators
 def transpose(mask):
@@ -152,6 +155,7 @@ def morphological_opening(mask_object, mask_kernel):
 def morphological_closing(mask_object, mask_kernel):
     return morphological_erosion(morphological_dilatation(mask_object, mask_kernel), mask_kernel)
 ## Topological operators
+# Topological mappings
 def dilatation(mask, chebyshev = False):
     if chebyshev:
         return morphological_dilatation(mask, kernel_chebyshev)
@@ -172,9 +176,43 @@ def closing(mask, chebyshev = False):
         return morphological_closing(mask, kernel_chebyshev)
     return morphological_closing(mask, kernel_manhattan)
 
-#### Functions of binary masks
-## Topological
-def connex_components(mask, chebyshev=False):
+# Topological tests
+def is_exterior(mask_connected_component, chebyshev = False):
+    """
+       Determines if a connected component is exterior (touches the border).
+
+       :param mask_connected_component: 2D list where 1 represents the component and 0 the background
+       :param chebyshev: If True, use 8-connectivity; if False, use 4-connectivity
+       :return: True if the component is exterior, False otherwise
+    """
+
+    kernel = kernel_chebyshev if chebyshev else kernel_manhattan
+    height, width = len(mask_connected_component), len(mask_connected_component[0])
+    mask = mask_connected_component
+
+    def check_adjacent_cells(row, col):
+        for i in range(3):
+            for j in range(3):
+                if kernel[i][j] == 1:
+                    adj_i, adj_j = row+i-1, col+j-1
+                    if 0 <= adj_i < height and 0 <= adj_j < width:
+                        if mask[i][j] == 1:
+                            return True
+
+    # Check top and bottom borders
+    for col in range(width):
+        if check_adjacent_cells(0, col) or check_adjacent_cells(height-1, col):
+                return True
+
+    # Check left and right borders (excluding corners)
+    for row in range(1, height-1):
+        if check_adjacent_cells(row, 0) or check_adjacent_cells(row, width-1):
+            return True
+
+    return False
+
+# Topological complex function
+def connected_components(mask, chebyshev=False):
     """Extract connex components.
         Chebyshev: if True then 8-connexity is used instead of 4-connexity
     """
@@ -225,9 +263,60 @@ def connex_components(mask, chebyshev=False):
 
         # Store the bounding box for the current component
         components[component_number]['box'] = ((min_row, min_col), (max_row, max_col))
+        components[component_number]['topology'] = 'chebyshev' if chebyshev else 'manhattan'
 
     return component_number, distribution, components
 
+def partition(mask_connected_component, chebyshev=False):
+    """Assuming the mask is one of a connected component of the grid / A single grid object
+    it partition the grid into its "holes" and exterior regions, which are connected components
+    of it's complement. An exterior regions is a region that has at least one 1 that is border adjacent.
+    """
+    mask_complement = complement(mask_connected_component)
+    # Non-trivial: if the topology of the 1s follows 4-connectivity (manhattan)
+    # then the topology of the 0s follows 8-connectivity (chebyshev)
+    # and vice-versa
+    component_number, distribution, components = connected_components(mask_complement, chebyshev=not chebyshev)
+    partition_grid = {}
+    for key in components.keys():
+        partition_grid[key] = {'mask': components[key]['mask'],
+            'is_exterior': is_exterior(components[key]['mask'])}
+
+    return component_number, distribution, partition_grid
+
+def topological_contains(mask1, mask2, chebyshev=False):
+    """
+    Function used to determine if an object includes a other one, and the "size" of this inclusion,
+    given by the number of dilatation to make it false.
+
+    :return: None if mask1 doesn't contains mask2, otherwise it returns n >= 0,
+    n being the number of dilatation during which mask1 still contains mask2
+    """
+    height, width = len(mask1), len(mask1[0])
+    _, _, partition_grid = partition(mask1, chebyshev=chebyshev)
+    interior = mask1
+    for key in partition_grid.keys():
+        if not partition_grid[key]['is_exterior']:
+            interior = union(interior, partition_grid[key]['mask'])
+
+    if not set_contains(interior, mask2):
+        return None
+
+    dilatation_number = 0
+    mask_growing = dilatation(mask2, chebyshev=chebyshev)
+    # Mask2 is dilated until it's no longer contained in the interior of mask1,
+    # or if it filled the entire grid
+    while set_contains(interior, mask_growing) and cardinal(mask_growing) < height*width:
+        dilatation_number+=1
+        mask_growing = dilatation(mask_growing, chebyshev=chebyshev)
+
+    return dilatation_number
+
+
+#def context(mask1, mask2, chebyshev = False):
+    kernel = kernel_chebyshev if chebyshev else kernel_manhattan
+
+#### Functions of binary masks
 ## Tests
 def _test_flatten():
     assert flatten([[1, 1], [0, 1]]) == [1, 1, 0, 1]
